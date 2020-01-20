@@ -46,13 +46,19 @@ export function sort<T extends IPositionDataType>({
   return list.sort(func);
 }
 
-export async function getFinalPositionAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
-  filterCondition: FindConditions<A>,
-  position: number,
+export async function getFinalPositionAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  filterCondition,
+  position,
   attemptsLeft = 10
-): Promise<number> {
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
+  filterCondition: FindConditions<A>;
+  position: number;
+  attemptsLeft?: number;
+}): Promise<number> {
   if (attemptsLeft < 1) {
     throw new Error("Tried to find a non-conflicting solution too many times");
   }
@@ -82,13 +88,13 @@ export async function getFinalPositionAsync<A extends IModelPosition, B>(
       previousPosition,
       position
     );
-    return getFinalPositionAsync(
+    return getFinalPositionAsync({
       target,
       createFromModel,
       filterCondition,
-      newPosition,
-      attemptsLeft - 1
-    );
+      position: newPosition,
+      attemptsLeft: attemptsLeft - 1
+    });
   }
   return position;
 }
@@ -98,18 +104,27 @@ export async function reformatIfNeededAsync<
   B extends IPositionDataType,
   TEventResult,
   TReformEventResult
->(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
-  previousPosition: number,
-  position: number,
-  positionConstant?: number,
-  findConditions?: FindConditions<A>,
+>({
+  target,
+  createFromModel,
+  previousPosition,
+  position,
+  positionConstant,
+  findConditions,
+  sendUpdateEvent,
+  sendReformationEvent
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
+  previousPosition: number;
+  position: number;
+  positionConstant?: number;
+  findConditions?: FindConditions<A>;
   sendUpdateEvent?:
     | ((entry: B) => TEventResult | Promise<TEventResult>)
-    | (() => TEventResult | Promise<TEventResult>),
-  sendReformationEvent?: () => TReformEventResult | Promise<TReformEventResult>
-) {
+    | (() => TEventResult | Promise<TEventResult>);
+  sendReformationEvent?: () => TReformEventResult | Promise<TReformEventResult>;
+}) {
   if (!triggerReformation(previousPosition, position, positionConstant)) {
     return;
   }
@@ -155,18 +170,24 @@ function isOrderByOptions(
   return arg.sort !== undefined;
 }
 
-export async function findElementAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
-  positionWhere: string | Brackets | ((qb: SelectQueryBuilder<A>) => string),
-  orderBy?: IOrderByOptions | OrderByCondition,
+export async function findElementAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  positionWhere,
+  orderBy,
+  filter
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
+  positionWhere: string | Brackets | ((qb: SelectQueryBuilder<A>) => string);
+  orderBy?: IOrderByOptions | OrderByCondition;
   filter?:
     | Brackets
     | string
     | ((qb: SelectQueryBuilder<A>) => string)
     | ObjectLiteral
-    | ObjectLiteral[]
-): Promise<Optional<B>> {
+    | ObjectLiteral[];
+}): Promise<Optional<B>> {
   let qb = await (filter
     ? selectQueryBuilderAsync({ target, where: filter })
     : selectQueryBuilderAsync({
@@ -182,56 +203,70 @@ export async function findElementAsync<A extends IModelPosition, B>(
   return Some(await qb.getOne()).map(createFromModel);
 }
 
-export async function findNextElementAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
-  position: number,
+export async function findNextElementAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  position,
+  filter
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
+  position: number;
   filter?:
     | Brackets
     | string
     | ((qb: SelectQueryBuilder<A>) => string)
     | ObjectLiteral
-    | ObjectLiteral[]
-): Promise<Optional<B>> {
-  return findElementAsync(
+    | ObjectLiteral[];
+}): Promise<Optional<B>> {
+  return findElementAsync({
     target,
     createFromModel,
-    `position > ${position}`,
-    { sort: "position", order: "ASC" },
+    positionWhere: `position > ${position}`,
+    orderBy: { sort: "position", order: "ASC" },
     filter
-  );
+  });
 }
 
-export async function findPreviousElementAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
-  position: number,
+export async function findPreviousElementAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  position,
+  filter
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
+  position: number;
   filter?:
     | Brackets
     | string
     | ((qb: SelectQueryBuilder<A>) => string)
     | ObjectLiteral
-    | ObjectLiteral[]
-): Promise<Optional<B>> {
-  return findElementAsync(
+    | ObjectLiteral[];
+}): Promise<Optional<B>> {
+  return findElementAsync({
     target,
     createFromModel,
-    `position < ${position}`,
-    { sort: "position", order: "DESC" },
+    positionWhere: `position < ${position}`,
+    orderBy: { sort: "position", order: "DESC" },
     filter
-  );
+  });
 }
 
-export async function findLastElementAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
+export async function findLastElementAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  filter
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
   filter?:
     | Brackets
     | string
     | ((qb: SelectQueryBuilder<A>) => string)
     | ObjectLiteral
-    | ObjectLiteral[]
-) {
+    | ObjectLiteral[];
+}) {
   const qb = await (filter
     ? selectQueryBuilderAsync({ target, where: filter })
     : createQueryBuilderAsync({ target }));
@@ -240,16 +275,20 @@ export async function findLastElementAsync<A extends IModelPosition, B>(
   );
 }
 
-export async function findFirstElementAsync<A extends IModelPosition, B>(
-  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>,
-  createFromModel: (val: A) => B,
+export async function findFirstElementAsync<A extends IModelPosition, B>({
+  target,
+  createFromModel,
+  filter
+}: {
+  target: ObjectType<A> | string | Function | (new () => A) | EntitySchema<A>;
+  createFromModel: (val: A) => B;
   filter?:
     | Brackets
     | string
     | ((qb: SelectQueryBuilder<A>) => string)
     | ObjectLiteral
-    | ObjectLiteral[]
-) {
+    | ObjectLiteral[];
+}) {
   const qb = await (filter
     ? selectQueryBuilderAsync({ target, where: filter })
     : createQueryBuilderAsync({ target }));
